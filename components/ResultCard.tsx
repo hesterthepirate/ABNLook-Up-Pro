@@ -1,174 +1,174 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import {
-  Building2,
-  CheckCircle2,
-  XCircle,
-  Hash,
-  Tag,
-  Copy,
-  Check,
-} from "lucide-react";
+import { useState } from 'react'
+import { CheckCircle, XCircle, Copy, Check, MapPin, Building2, Tag, FileText } from 'lucide-react'
+import type { AbnResult } from '@/lib/types'
+import { exportSingleToCsv, downloadCsv } from '@/lib/csv'
+import ExportButton from './ExportButton'
 
-interface ResultCardProps {
-  abn: string;
-  entityName: string;
-  abnStatus: string;
-  gstRegistered: boolean;
-  gstCancelledDate?: string;
+interface Props {
+  result: AbnResult
 }
 
-function formatAbn(abn: string): string {
-  const clean = abn.replace(/\s/g, "");
-  if (clean.length !== 11) return abn;
-  return `${clean.slice(0, 2)} ${clean.slice(2, 5)} ${clean.slice(5, 8)} ${clean.slice(8, 11)}`;
+function StatusBadge({ status }: { status: string }) {
+  const isActive = status.toLowerCase().includes('active')
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+        isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+      }`}
+    >
+      {isActive ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+      {status || 'Unknown'}
+    </span>
+  )
 }
 
-export default function ResultCard({
-  abn,
-  entityName,
-  abnStatus,
-  gstRegistered,
-  gstCancelledDate,
-}: ResultCardProps) {
-  const [copied, setCopied] = useState(false);
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
 
-  const isActive = abnStatus?.toLowerCase() === "active";
-  const formattedAbn = formatAbn(abn);
-
-  function handleCopy() {
-    navigator.clipboard
-      .writeText(formattedAbn)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {
-        // Fallback: silently fail — clipboard not available
-      });
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API unavailable
+    }
   }
 
   return (
-    <div className="fade-in card-shadow rounded-2xl bg-white overflow-hidden">
-      {/* Card header */}
-      <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+    <button
+      onClick={handleCopy}
+      className="ml-2 p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+      title="Copy ABN"
+      aria-label="Copy ABN to clipboard"
+    >
+      {copied
+        ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+        : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  )
+}
+
+function DataRow({ label, value }: { label: string; value: string }) {
+  if (!value) return null
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start py-3 border-b border-slate-100 last:border-0">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:w-48 shrink-0 mb-0.5 sm:mb-0 sm:pt-0.5">
+        {label}
+      </dt>
+      <dd className="text-sm text-slate-800 font-medium">{value}</dd>
+    </div>
+  )
+}
+
+export default function ResultCard({ result }: Props) {
+  const handleExport = () => {
+    const csv = exportSingleToCsv(result)
+    downloadCsv(csv, `abn-${result.abn}.csv`)
+  }
+
+  const abnStatusFull = [
+    result.abnStatus,
+    result.abnStatusEffectiveFrom ? `(from ${result.abnStatusEffectiveFrom})` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const gstStatusFull = [
+    result.gstStatus,
+    result.gstEffectiveFrom ? `(from ${result.gstEffectiveFrom})` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-blue-600" strokeWidth={1.75} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-0.5">
-                Entity Name
-              </p>
-              <h2 className="text-xl font-bold text-slate-900 leading-tight truncate">
-                {entityName}
-              </h2>
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-white leading-tight">
+              {result.entityName || 'Unknown Entity'}
+            </h2>
+            <div className="flex items-center mt-1.5">
+              <span className="text-slate-300 text-sm font-mono tracking-wider">
+                {result.abnFormatted}
+              </span>
+              <CopyButton text={result.abn} />
             </div>
           </div>
-          <span
-            className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-              isActive
-                ? "bg-green-50 text-green-700 ring-1 ring-green-200"
-                : "bg-red-50 text-red-700 ring-1 ring-red-200"
-            }`}
-          >
-            {isActive ? (
-              <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2} />
-            ) : (
-              <XCircle className="w-3.5 h-3.5" strokeWidth={2} />
-            )}
-            {abnStatus}
-          </span>
+          <div className="shrink-0 pt-1">
+            {result.abnStatus && <StatusBadge status={result.abnStatus} />}
+          </div>
         </div>
       </div>
 
-      {/* Card body */}
-      <div className="px-6 py-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* ABN */}
-        <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Hash className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-              ABN
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-mono font-semibold text-slate-800 tracking-wide">
-              {formattedAbn}
-            </span>
-            <button
-              onClick={handleCopy}
-              aria-label="Copy ABN to clipboard"
-              className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${
-                copied
-                  ? "bg-green-100 text-green-600"
-                  : "bg-white text-slate-400 hover:text-blue-600 hover:bg-blue-50 ring-1 ring-slate-200"
-              }`}
-            >
-              {copied ? (
-                <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
-              ) : (
-                <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* GST */}
-        <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Tag className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-              GST
-            </span>
-          </div>
-          {gstRegistered ? (
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2
-                className="w-4 h-4 text-green-600"
-                strokeWidth={2}
-              />
-              <span className="text-sm font-semibold text-green-700">
-                Registered
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <XCircle className="w-4 h-4 text-slate-400" strokeWidth={2} />
-              <span className="text-sm font-semibold text-slate-500">
-                Not registered
-              </span>
+      {/* Details */}
+      <div className="px-6 py-2">
+        <dl>
+          <DataRow label="ABN Status" value={abnStatusFull} />
+          <DataRow label="Entity Type" value={result.entityType} />
+          <DataRow label="GST Status" value={gstStatusFull} />
+          {result.mainBusinessLocation && (
+            <div className="flex flex-col sm:flex-row sm:items-start py-3 border-b border-slate-100">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:w-48 shrink-0 mb-0.5 sm:mb-0 sm:pt-0.5">
+                Main Location
+              </dt>
+              <dd className="text-sm text-slate-800 font-medium flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                {result.mainBusinessLocation}
+              </dd>
             </div>
           )}
-          {gstCancelledDate && (
-            <p className="text-xs text-slate-400 mt-1">
-              Cancelled {gstCancelledDate}
-            </p>
-          )}
-        </div>
+        </dl>
 
-        {/* Entity type placeholder — can be wired up when API returns it */}
-        <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Building2
-              className="w-3.5 h-3.5 text-slate-400"
-              strokeWidth={2}
-            />
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-              ABN Status
-            </span>
+        {result.tradingNames.length > 0 && (
+          <div className="py-3 border-b border-slate-100">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Tag className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Trading Names
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {result.tradingNames.map((name) => (
+                <span key={name} className="px-2.5 py-1 bg-blue-50 text-blue-800 text-xs font-medium rounded-lg">
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
-          <span
-            className={`text-sm font-semibold ${
-              isActive ? "text-green-700" : "text-red-600"
-            }`}
-          >
-            {abnStatus}
-          </span>
-        </div>
+        )}
+
+        {result.businessNames.length > 0 && (
+          <div className="py-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Business Names
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {result.businessNames.map((name) => (
+                <span key={name} className="px-2.5 py-1 bg-violet-50 text-violet-800 text-xs font-medium rounded-lg">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+        <span className="text-xs text-slate-400 flex items-center gap-1">
+          <FileText className="w-3 h-3" />
+          Source: abr.business.gov.au
+        </span>
+        <ExportButton onClick={handleExport} />
       </div>
     </div>
-  );
+  )
 }
