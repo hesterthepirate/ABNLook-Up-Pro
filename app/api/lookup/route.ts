@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ABR_GUID = "361eb945-6e2f-4bea-baf5-7f68ee24eb97";
-
-function parseXml(xml: string, tag: string): string {
-  const match = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
-  return match ? match[1].trim() : "";
+function extract(html: string, label: string): string {
+  const re = new RegExp(label + ".*?<td>(.*?)</td>", "s");
+  const match = html.match(re);
+  if (!match) return "";
+  return match[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
 }
 
 export async function GET(request: NextRequest) {
@@ -15,31 +15,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = `https://abr.business.gov.au/abrxmlsearch/AbrXmlSearch.asmx/ABRSearchByABN?searchString=${abn}&includeHistoricalDetails=N&authenticationGuid=${ABR_GUID}`;
-    const res = await fetch(url, { next: { revalidate: 3600 } });
-    const xml = await res.text();
+    const res = await fetch(`https://abr.business.gov.au/ABN/View?abn=${abn}`, {
+      headers: { "User-Agent": "ABNLookupPro/1.0" },
+      next: { revalidate: 3600 },
+    });
+    const html = await res.text();
 
-    const entityName =
-      parseXml(xml, "organisationName") ||
-      parseXml(xml, "fullName") ||
-      [parseXml(xml, "givenName"), parseXml(xml, "familyName")].filter(Boolean).join(" ");
-    const abnStatus = parseXml(xml, "entityStatusCode");
-    const gstFrom = parseXml(xml, "effectiveFrom");
-    const entityType = parseXml(xml, "entityDescription");
-    const postcode = parseXml(xml, "postcode");
-    const state = parseXml(xml, "stateCode");
-
-    if (!entityName && !abnStatus) {
+    if (html.includes("No records found") || html.includes("is not a valid ABN")) {
       return NextResponse.json({ error: "ABN not found" }, { status: 404 });
+    }
+
+    const entityName = extract(html, "Entity name");
+    const abnStatus = extract(html, "ABN status");
+    const gstRegistered = extract(html, "Goods & Services Tax") || extract(html, "Goods &amp; Services Tax");
+    const entityType = extract(html, "Entity type");
+    const location = extract(html, "State") || extract(html, "Location");
+
+    if (!entityName) {
+      return NextResponse.json({ error: "Could not parse ABN details" }, { status: 500 });
     }
 
     return NextResponse.json({
       abn,
       entityName,
-      abnStatus,
-      entityType,
-      gstFrom: gstFrom || null,
-      location: [postcode, state].filter(Boolean).join(" "),
+      abnStatus: abnStatus.includes("Active") ? "Active" : abnStatus.includes("Cancelled") ? "Cancelled" : abnStatus,
+      gstRegistered: gstRegistered || null,
+      gstCancelledDate: null,
     });
   } catch (err) {
     return NextResponse.json({ error: "ABR lookup failed" }, { status: 500 });
